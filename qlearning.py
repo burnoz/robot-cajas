@@ -223,6 +223,7 @@ plt.tight_layout()
 plt.show()
 
 
+
 # Parámetros visuales
 CELL_SIZE = 40
 MARGIN = 2
@@ -231,6 +232,24 @@ WINDOW_SIZE = (cols * CELL_SIZE, rows * CELL_SIZE)
 pygame.init()
 screen = pygame.display.set_mode(WINDOW_SIZE)
 pygame.display.set_caption('Recorrido óptimo Q-Learning')
+
+# Inicializar agentes en posiciones aleatorias libres
+def get_random_free_cell(exclude=None):
+    while True:
+        r = np.random.randint(rows)
+        c = np.random.randint(cols)
+        if rewards[r, c] == -1 and (exclude is None or (r, c) not in exclude):
+            return (r, c)
+
+agents = []
+used_cells = set()
+for _ in range(4):
+    cell = get_random_free_cell(exclude=used_cells)
+    agents.append(cell)
+    used_cells.add(cell)
+
+# Variable para el agente seleccionado
+selected_agent = None
 
 def draw_grid(path=None):
     for r in range(rows):
@@ -253,6 +272,17 @@ def draw_grid(path=None):
                 color,
                 [c * CELL_SIZE + MARGIN, r * CELL_SIZE + MARGIN, CELL_SIZE - MARGIN, CELL_SIZE - MARGIN]
             )
+    # Dibuja los agentes
+    for idx, agent in enumerate(agents):
+        color = (0, 0, 255)  # azul para agentes normales
+        if selected_agent is not None and agent == selected_agent:
+            color = (0, 255, 0)  # verde para el agente seleccionado
+        pygame.draw.circle(
+            screen,
+            color,
+            (agent[1] * CELL_SIZE + CELL_SIZE // 2, agent[0] * CELL_SIZE + CELL_SIZE // 2),
+            CELL_SIZE // 3
+        )
 
 def animate_path(path):
     # Actualiza el JSON de salida antes de animar
@@ -306,10 +336,21 @@ while True:
                 if rewards[row, col] == -1:
                     selected_cell = (row, col)
                     path_to_animate = None
+                    # Selecciona el agente más cercano a la caja manual
+                    if selected_cell is not None:
+                        min_dist = float('inf')
+                        selected_agent = None
+                        for agent in agents:
+                            dist = abs(agent[0] - selected_cell[0]) + abs(agent[1] - selected_cell[1])
+                            if dist < min_dist:
+                                min_dist = dist
+                                selected_agent = agent
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE and selected_cell is not None:
                 path_to_animate = get_optimal_path(selected_cell)
                 animate_path(path_to_animate)
+                auto_box_timer = time.time()  # Reinicia el temporizador automático
+                # El agente más cercano ya está seleccionado por el clic
 
     # Animación automática cada cierto tiempo
     if not auto_box_animating and current_time - auto_box_timer > auto_box_interval:
@@ -320,6 +361,14 @@ while True:
             if rewards[r, c] == -1:
                 auto_box_cell = (r, c)
                 break
+        # Selecciona el agente más cercano a la caja automática
+        min_dist = float('inf')
+        selected_agent = None
+        for agent in agents:
+            dist = abs(agent[0] - auto_box_cell[0]) + abs(agent[1] - auto_box_cell[1])
+            if dist < min_dist:
+                min_dist = dist
+                selected_agent = agent
         auto_box_animating = True
         auto_box_timer = current_time
         auto_path = get_optimal_path(auto_box_cell)
