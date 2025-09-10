@@ -244,6 +244,10 @@ def draw_grid(path=None):
                 color = (0, 255, 0)  # destino
             if path and (r, c) in path:
                 color = (30, 144, 255)  # camino
+            if selected_cell is not None and (r, c) == selected_cell:
+                color = (255, 255, 0)  # celda seleccionada
+            if auto_box_cell is not None and (r, c) == auto_box_cell:
+                color = (255, 140, 0)  # caja automática
             pygame.draw.rect(
                 screen,
                 color,
@@ -251,6 +255,17 @@ def draw_grid(path=None):
             )
 
 def animate_path(path):
+    # Actualiza el JSON de salida antes de animar
+    output = {
+        "shelves": shelves,
+        "machinery": machinery,
+        "delivery_point": delivery_point,
+        "robot_path": path
+    }
+    
+    with open("output.json", "w") as f:
+        json.dump(output, f, indent=4)
+
     for idx, pos in enumerate(path):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -269,12 +284,49 @@ def animate_path(path):
         pygame.display.flip()
         time.sleep(0.2)
 
-# Ejecuta la animación
-animate_path(optimal_path)
+selected_cell = None
+path_to_animate = None
+auto_box_cell = None
+auto_box_timer = time.time()
+auto_box_interval = 5  # segundos
+auto_box_animating = False
 
-# Espera a que se cierre la ventana
+# Bucle principal de PyGame
 while True:
+    current_time = time.time()
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            mouse_x, mouse_y = event.pos
+            col = mouse_x // CELL_SIZE
+            row = mouse_y // CELL_SIZE
+            if 0 <= row < rows and 0 <= col < cols:
+                if rewards[row, col] == -1:
+                    selected_cell = (row, col)
+                    path_to_animate = None
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE and selected_cell is not None:
+                path_to_animate = get_optimal_path(selected_cell)
+                animate_path(path_to_animate)
+
+    # Animación automática cada cierto tiempo
+    if not auto_box_animating and current_time - auto_box_timer > auto_box_interval:
+        # Selecciona una celda libre aleatoria
+        while True:
+            r = np.random.randint(rows)
+            c = np.random.randint(cols)
+            if rewards[r, c] == -1:
+                auto_box_cell = (r, c)
+                break
+        auto_box_animating = True
+        auto_box_timer = current_time
+        auto_path = get_optimal_path(auto_box_cell)
+        animate_path(auto_path)
+        auto_box_animating = False
+        auto_box_cell = None
+
+    screen.fill((0, 0, 0))
+    draw_grid(path_to_animate)
+    pygame.display.flip()
